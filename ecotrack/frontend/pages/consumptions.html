@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mis Consumos — EcoTrack Pro</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-container"></div>
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h1 class="page-title">Mis Consumos</h1>
+        <p class="page-subtitle">Historial de registros mensuales</p>
+      </div>
+      <a href="register-consumption.html">
+        <button class="btn-primary">+ Nuevo registro</button>
+      </a>
+    </div>
+
+    <div class="card">
+      <div id="loading" class="loading"><span class="spinner"></span></div>
+      <div id="empty" class="empty-state" style="display:none">
+        <div class="icon">📋</div>
+        <h3>Sin registros aún</h3>
+        <p>Registra tu primer consumo mensual para empezar a hacer seguimiento.</p>
+        <a href="register-consumption.html">
+          <button class="btn-primary" style="margin-top:16px">Registrar ahora</button>
+        </a>
+      </div>
+      <div class="table-wrapper" id="table-wrapper" style="display:none">
+        <table>
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th>Electricidad</th>
+              <th>Gas</th>
+              <th>Agua</th>
+              <th>Transporte</th>
+              <th>Huella CO₂</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-backdrop" id="edit-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Editar consumo</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <input type="hidden" id="edit-id" />
+    <div class="form-row">
+      <div class="form-group">
+        <label>Electricidad (kWh)</label>
+        <input type="number" id="edit-electricity" min="0" step="0.1" />
+      </div>
+      <div class="form-group">
+        <label>Gas (kWh)</label>
+        <input type="number" id="edit-gas" min="0" step="0.1" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Agua (litros)</label>
+        <input type="number" id="edit-water" min="0" step="1" />
+      </div>
+      <div class="form-group">
+        <label>Transporte (km)</label>
+        <input type="number" id="edit-transport" min="0" step="1" />
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveEdit()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api.js?v=3"></script>
+<script>
+  requireAuth();
+  document.getElementById('sidebar-container').innerHTML = renderSidebar('consumptions');
+
+  let consumptions = [];
+
+  async function load() {
+    try {
+      consumptions = await api.getConsumptions();
+      document.getElementById('loading').style.display = 'none';
+
+      if (!consumptions.length) {
+        document.getElementById('empty').style.display = 'block';
+        return;
+      }
+
+      document.getElementById('table-wrapper').style.display = 'block';
+      renderTable();
+    } catch (err) {
+      showToast('Error al cargar consumos', 'error');
+    }
+  }
+
+  function carbonBadge(kg) {
+    const color = kg < 100 ? 'green' : kg < 200 ? 'yellow' : 'red';
+    return `<span class="badge badge-${color}">${kg.toFixed(1)} kg CO₂</span>`;
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = consumptions.map(c => `
+      <tr>
+        <td><strong>${c.month}</strong></td>
+        <td>${c.electricity_kwh} kWh</td>
+        <td>${c.gas_kwh} kWh</td>
+        <td>${c.water_liters} L</td>
+        <td>${c.transport_km} km</td>
+        <td>${carbonBadge(c.carbon_footprint_kg)}</td>
+        <td>
+          <div class="table-actions">
+            <button class="btn-secondary btn-sm" onclick="openEdit(${c.id})">Editar</button>
+            <a href="ai-plan.html?id=${c.id}">
+              <button class="btn-ai btn-sm">🤖 IA</button>
+            </a>
+            <button class="btn-danger btn-sm" onclick="deleteConsumption(${c.id})">Borrar</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function openEdit(id) {
+    const c = consumptions.find(x => x.id === id);
+    if (!c) return;
+    document.getElementById('edit-id').value = id;
+    document.getElementById('edit-electricity').value = c.electricity_kwh;
+    document.getElementById('edit-gas').value = c.gas_kwh;
+    document.getElementById('edit-water').value = c.water_liters;
+    document.getElementById('edit-transport').value = c.transport_km;
+    document.getElementById('edit-modal').style.display = 'flex';
+  }
+
+  function closeModal() {
+    document.getElementById('edit-modal').style.display = 'none';
+  }
+
+  async function saveEdit() {
+    const id = document.getElementById('edit-id').value;
+    const data = {
+      electricity_kwh: parseFloat(document.getElementById('edit-electricity').value),
+      gas_kwh: parseFloat(document.getElementById('edit-gas').value),
+      water_liters: parseFloat(document.getElementById('edit-water').value),
+      transport_km: parseFloat(document.getElementById('edit-transport').value),
+    };
+    try {
+      await api.updateConsumption(id, data);
+      showToast('Consumo actualizado correctamente');
+      closeModal();
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function deleteConsumption(id) {
+    if (!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
+    try {
+      await api.deleteConsumption(id);
+      showToast('Registro eliminado');
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

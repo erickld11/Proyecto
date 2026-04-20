@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.egg-info/
+
+# Docker
+.dockerignore
+
+# DB
+*.sqlite3
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Node (si se añade en el futuro)
+node_modules/

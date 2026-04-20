@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registrar Consumo — EcoTrack Pro</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-container"></div>
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h1 class="page-title">Registrar Consumo</h1>
+        <p class="page-subtitle">Introduce los datos de consumo del mes</p>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+      <div class="card">
+        <div id="form-error" class="alert alert-error" style="display:none"></div>
+        <div id="form-success" class="alert alert-success" style="display:none"></div>
+
+        <div class="form-group">
+          <label>Mes</label>
+          <input type="month" id="month" />
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0" />
+
+        <div style="font-size:0.8rem;color:var(--text2);margin-bottom:16px;font-weight:600">
+          DATOS DE CONSUMO
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>⚡ Electricidad (kWh)</label>
+            <input type="number" id="electricity" min="0" step="0.1" placeholder="0" value="0" oninput="updatePreview()" />
+          </div>
+          <div class="form-group">
+            <label>🔥 Gas natural (kWh)</label>
+            <input type="number" id="gas" min="0" step="0.1" placeholder="0" value="0" oninput="updatePreview()" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>💧 Agua (litros)</label>
+            <input type="number" id="water" min="0" step="1" placeholder="0" value="0" oninput="updatePreview()" />
+          </div>
+          <div class="form-group">
+            <label>🚗 Transporte (km)</label>
+            <input type="number" id="transport" min="0" step="1" placeholder="0" value="0" oninput="updatePreview()" />
+          </div>
+        </div>
+
+        <div class="form-actions" style="justify-content:space-between;align-items:center">
+          <a href="consumptions.html" style="color:var(--text2);font-size:0.85rem">← Volver</a>
+          <div style="display:flex;gap:10px">
+            <button class="btn-secondary" onclick="resetForm()">Limpiar</button>
+            <button class="btn-primary" onclick="handleSubmit()">Guardar registro</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview card -->
+      <div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title">Vista previa de huella</div>
+          <div style="text-align:center;padding:16px 0">
+            <div style="font-size:3rem;font-weight:800;color:var(--green)" id="preview-total">0.0</div>
+            <div style="color:var(--text2);font-size:0.87rem;margin-top:4px">kg de CO₂ estimados</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="preview-breakdown">
+            <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:0.7rem;color:var(--text3);font-weight:700;text-transform:uppercase">Electricidad</div>
+              <div style="font-size:1.1rem;font-weight:700;color:var(--green)" id="prev-elec">0.0 kg</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:0.7rem;color:var(--text3);font-weight:700;text-transform:uppercase">Gas</div>
+              <div style="font-size:1.1rem;font-weight:700;color:var(--blue)" id="prev-gas">0.0 kg</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:0.7rem;color:var(--text3);font-weight:700;text-transform:uppercase">Agua</div>
+              <div style="font-size:1.1rem;font-weight:700;color:var(--yellow)" id="prev-water">0.0 kg</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:0.7rem;color:var(--text3);font-weight:700;text-transform:uppercase">Transporte</div>
+              <div style="font-size:1.1rem;font-weight:700;color:var(--red)" id="prev-transport">0.0 kg</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="background:var(--green-light);border-color:rgba(45,122,45,0.2)">
+          <div class="card-title" style="color:var(--green)">💡 ¿Sabías que?</div>
+          <p style="font-size:0.83rem;color:var(--text2);line-height:1.6">
+            Los factores de emisión usados son:
+            <br>• Electricidad: 0.233 kg CO₂/kWh (red española)
+            <br>• Gas natural: 0.202 kg CO₂/kWh
+            <br>• Agua: 0.000298 kg CO₂/litro
+            <br>• Transporte: 0.171 kg CO₂/km (coche medio)
+          </p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../js/api.js?v=3"></script>
+<script>
+  requireAuth();
+  document.getElementById('sidebar-container').innerHTML = renderSidebar('register-consumption');
+
+  // Set current month as default
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  document.getElementById('month').value = `${yyyy}-${mm}`;
+
+  const FACTORS = { electricity: 0.233, gas: 0.202, water: 0.000298, transport: 0.171 };
+
+  function updatePreview() {
+    const elec = parseFloat(document.getElementById('electricity').value) || 0;
+    const gas = parseFloat(document.getElementById('gas').value) || 0;
+    const water = parseFloat(document.getElementById('water').value) || 0;
+    const transport = parseFloat(document.getElementById('transport').value) || 0;
+
+    const eCarbon = elec * FACTORS.electricity;
+    const gCarbon = gas * FACTORS.gas;
+    const wCarbon = water * FACTORS.water;
+    const tCarbon = transport * FACTORS.transport;
+    const total = eCarbon + gCarbon + wCarbon + tCarbon;
+
+    document.getElementById('preview-total').textContent = total.toFixed(1);
+    document.getElementById('prev-elec').textContent = eCarbon.toFixed(1) + ' kg';
+    document.getElementById('prev-gas').textContent = gCarbon.toFixed(1) + ' kg';
+    document.getElementById('prev-water').textContent = wCarbon.toFixed(3) + ' kg';
+    document.getElementById('prev-transport').textContent = tCarbon.toFixed(1) + ' kg';
+  }
+
+  function resetForm() {
+    ['electricity', 'gas', 'water', 'transport'].forEach(id => {
+      document.getElementById(id).value = 0;
+    });
+    updatePreview();
+  }
+
+  async function handleSubmit() {
+    const errorEl = document.getElementById('form-error');
+    const successEl = document.getElementById('form-success');
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const month = document.getElementById('month').value;
+    if (!month) {
+      errorEl.textContent = 'Selecciona un mes.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const data = {
+      month,
+      electricity_kwh: parseFloat(document.getElementById('electricity').value) || 0,
+      gas_kwh: parseFloat(document.getElementById('gas').value) || 0,
+      water_liters: parseFloat(document.getElementById('water').value) || 0,
+      transport_km: parseFloat(document.getElementById('transport').value) || 0,
+    };
+
+    try {
+      const result = await api.createConsumption(data);
+      successEl.textContent = `✓ Registro guardado. Huella: ${result.carbon_footprint_kg} kg CO₂`;
+      successEl.style.display = 'block';
+      showToast('Consumo registrado correctamente');
+      setTimeout(() => window.location.href = 'consumptions.html', 1500);
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.style.display = 'block';
+    }
+  }
+</script>
+</body>
+</html>

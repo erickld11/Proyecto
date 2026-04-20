@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Debug — EcoTrack</title>
+  <style>
+    body { font-family: monospace; padding: 30px; background: #f0f4f0; }
+    .box { background: white; border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    .ok { color: green; font-weight: bold; }
+    .err { color: red; font-weight: bold; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; border-radius: 6px; border: none; background: #2d7a2d; color: white; font-weight: bold; }
+    .btn-red { background: #c0392b; }
+    pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+<h2>🔍 EcoTrack Debug</h2>
+
+<div class="box">
+  <h3>LocalStorage actual</h3>
+  <pre id="ls-content"></pre>
+</div>
+
+<div class="box">
+  <h3>Test de conexión al backend</h3>
+  <pre id="backend-test">Probando...</pre>
+</div>
+
+<div class="box">
+  <h3>Test de login</h3>
+  <input id="test-email" placeholder="email" style="padding:8px;margin:4px;width:250px;border:1px solid #ccc;border-radius:4px"/>
+  <input id="test-pass" type="password" placeholder="contraseña" style="padding:8px;margin:4px;width:200px;border:1px solid #ccc;border-radius:4px"/>
+  <br><br>
+  <button onclick="testLogin()">Probar login</button>
+  <pre id="login-result">—</pre>
+</div>
+
+<div class="box">
+  <h3>Acciones</h3>
+  <button onclick="clearAll()">🗑️ Limpiar TODO el localStorage</button>
+  <button onclick="goLogin()">→ Ir al Login</button>
+  <button onclick="goDash()">→ Ir al Dashboard</button>
+</div>
+
+<script>
+function showLS() {
+  var out = '';
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    var v = localStorage.getItem(k);
+    if (v && v.length > 100) v = v.substring(0, 100) + '...';
+    out += k + ' = ' + v + '\n';
+  }
+  document.getElementById('ls-content').textContent = out || '(vacío)';
+}
+
+async function testBackend() {
+  try {
+    var res = await fetch('http://localhost:8000/health');
+    var data = await res.json();
+    document.getElementById('backend-test').textContent = '✅ Backend OK: ' + JSON.stringify(data);
+  } catch (e) {
+    document.getElementById('backend-test').textContent = '❌ Error: ' + e.message;
+  }
+}
+
+async function testLogin() {
+  var email = document.getElementById('test-email').value;
+  var pass = document.getElementById('test-pass').value;
+  var el = document.getElementById('login-result');
+  el.textContent = 'Probando...';
+
+  try {
+    var res = await fetch('http://localhost:8000/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: pass })
+    });
+    var data = await res.json();
+    
+    if (res.ok && data.access_token) {
+      // Guardar con la clave correcta
+      localStorage.setItem('eco_token', data.access_token);
+      localStorage.setItem('eco_user', JSON.stringify(data.user));
+      
+      el.textContent = '✅ LOGIN OK\nToken guardado: ' + data.access_token.substring(0, 50) + '...\nUsuario: ' + JSON.stringify(data.user);
+      
+      // Test dashboard con el token
+      setTimeout(testDashboard, 500);
+      showLS();
+    } else {
+      el.textContent = '❌ Error ' + res.status + ': ' + JSON.stringify(data);
+    }
+  } catch (e) {
+    el.textContent = '❌ Excepción: ' + e.message;
+  }
+}
+
+async function testDashboard() {
+  var token = localStorage.getItem('eco_token');
+  if (!token) { return; }
+  
+  try {
+    var res = await fetch('http://localhost:8000/api/dashboard', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    var data = await res.json();
+    document.getElementById('login-result').textContent += '\n\n📊 DASHBOARD ' + res.status + ': ' + JSON.stringify(data).substring(0, 200);
+    
+    if (res.ok) {
+      document.getElementById('login-result').textContent += '\n\n✅ TODO OK — Redirigiendo al dashboard en 2 segundos...';
+      setTimeout(function() { window.location.href = '/pages/dashboard.html'; }, 2000);
+    }
+  } catch (e) {
+    document.getElementById('login-result').textContent += '\nError dashboard: ' + e.message;
+  }
+}
+
+function clearAll() {
+  localStorage.clear();
+  showLS();
+  alert('LocalStorage limpiado');
+}
+
+function goLogin() { window.location.href = '/index.html'; }
+function goDash() { window.location.href = '/pages/dashboard.html'; }
+
+showLS();
+testBackend();
+</script>
+</body>
+</html>
