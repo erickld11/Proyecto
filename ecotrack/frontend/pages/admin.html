@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Panel Admin — EcoTrack Pro</title>
+  <link rel="stylesheet" href="../css/styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-container"></div>
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h1 class="page-title">👑 Panel de Administración</h1>
+        <p class="page-subtitle">Gestión global de usuarios y consumos de la plataforma</p>
+      </div>
+      <button class="btn-primary" onclick="seedDemoData()">🌱 Cargar datos demo</button>
+    </div>
+
+    <!-- Stats globales -->
+    <div class="stats-grid" id="global-stats">
+      <div class="stat-card"><div class="loading"><span class="spinner"></span></div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <button class="btn-primary btn-sm" id="tab-users" onclick="showTab('users')">👥 Usuarios</button>
+      <button class="btn-secondary btn-sm" id="tab-consumptions" onclick="showTab('consumptions')">⚡ Todos los consumos</button>
+    </div>
+
+    <!-- Usuarios -->
+    <div id="panel-users" class="card">
+      <div class="card-title">Gestión de usuarios</div>
+      <div id="users-loading" class="loading"><span class="spinner"></span></div>
+      <div class="table-wrapper" id="users-table" style="display:none">
+        <table>
+          <thead><tr><th>ID</th><th>Nombre</th><th>Email</th><th>Empresa</th><th>Rol</th><th>Estado</th><th>Consumos</th><th>CO₂ Total</th><th>Acciones</th></tr></thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Consumos de todos -->
+    <div id="panel-consumptions" class="card" style="display:none">
+      <div class="card-title">Consumos de todos los usuarios</div>
+      <div id="cons-loading" class="loading"><span class="spinner"></span></div>
+      <div class="table-wrapper" id="cons-table" style="display:none">
+        <table>
+          <thead><tr><th>Usuario</th><th>Empresa</th><th>Mes</th><th>Electricidad</th><th>Gas</th><th>Agua</th><th>Transporte</th><th>CO₂</th></tr></thead>
+          <tbody id="cons-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Edit user modal -->
+<div class="modal-backdrop" id="edit-modal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Editar usuario</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <input type="hidden" id="edit-user-id"/>
+    <div class="form-group"><label>Nombre</label><input type="text" id="edit-name"/></div>
+    <div class="form-group"><label>Empresa</label><input type="text" id="edit-company"/></div>
+    <div class="form-group">
+      <label>Rol</label>
+      <select id="edit-is-admin">
+        <option value="false">Usuario normal</option>
+        <option value="true">Administrador</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Estado</label>
+      <select id="edit-is-active">
+        <option value="true">Activo</option>
+        <option value="false">Inactivo</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveUser()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  requireAuth();
+  if (!isAdmin()) { window.location.replace('/pages/dashboard.html'); }
+  document.getElementById('sidebar-container').innerHTML = renderSidebar('admin');
+
+  var users = [], currentTab = 'users';
+
+  async function loadStats() {
+    try {
+      var stats = await api.admin.getStats();
+      document.getElementById('global-stats').innerHTML =
+        '<div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">' + stats.total_users + '</div><div class="stat-label">Usuarios registrados</div></div>' +
+        '<div class="stat-card"><div class="stat-icon">📋</div><div class="stat-value">' + stats.total_consumptions + '</div><div class="stat-label">Registros de consumo</div></div>' +
+        '<div class="stat-card"><div class="stat-icon">🌍</div><div class="stat-value">' + stats.total_carbon_kg.toFixed(0) + '</div><div class="stat-label">kg CO₂ total plataforma</div></div>' +
+        '<div class="stat-card"><div class="stat-icon">🤖</div><div class="stat-value">' + stats.total_ai_plans + '</div><div class="stat-label">Planes IA generados</div></div>';
+    } catch(err) {}
+  }
+
+  async function loadUsers() {
+    try {
+      users = await api.admin.getUsers();
+      document.getElementById('users-loading').style.display='none';
+      document.getElementById('users-table').style.display='block';
+      var currentUser = getUser();
+      document.getElementById('users-tbody').innerHTML = users.map(function(u){
+        var roleBadge = u.is_admin ? '<span class="badge badge-orange">👑 Admin</span>' : '<span class="badge badge-blue">Usuario</span>';
+        var statusBadge = u.is_active ? '<span class="badge badge-green">Activo</span>' : '<span class="badge badge-red">Inactivo</span>';
+        var deleteBtn = u.id !== currentUser.id ? '<button class="btn-danger btn-sm" onclick="deleteUser('+u.id+')">Borrar</button>' : '';
+        return '<tr><td>' + u.id + '</td><td><strong>' + u.name + '</strong></td><td>' + u.email + '</td>' +
+               '<td>' + (u.company||'—') + '</td><td>' + roleBadge + '</td><td>' + statusBadge + '</td>' +
+               '<td>' + u.total_consumptions + '</td>' +
+               '<td><span class="badge badge-green">' + u.total_carbon_kg.toFixed(1) + ' kg</span></td>' +
+               '<td><div class="table-actions"><button class="btn-secondary btn-sm" onclick="openEdit('+u.id+')">Editar</button>' + deleteBtn + '</div></td></tr>';
+      }).join('');
+    } catch(err) { showToast('Error al cargar usuarios', 'error'); }
+  }
+
+  async function loadAllConsumptions() {
+    try {
+      var consumptions = await api.admin.getAllConsumptions();
+      document.getElementById('cons-loading').style.display='none';
+      document.getElementById('cons-table').style.display='block';
+      document.getElementById('cons-tbody').innerHTML = consumptions.map(function(c){
+        var colorBadge = c.carbon_footprint_kg < 100 ? 'green' : c.carbon_footprint_kg < 200 ? 'yellow' : 'red';
+        return '<tr><td><strong>' + c.user_name + '</strong><br><small>' + c.user_email + '</small></td>' +
+               '<td>' + (c.company||'—') + '</td><td><strong>' + c.month + '</strong></td>' +
+               '<td>' + c.electricity_kwh + ' kWh</td><td>' + c.gas_kwh + ' kWh</td>' +
+               '<td>' + c.water_liters + ' L</td><td>' + c.transport_km + ' km</td>' +
+               '<td><span class="badge badge-' + colorBadge + '">' + c.carbon_footprint_kg.toFixed(1) + ' kg</span></td></tr>';
+      }).join('');
+    } catch(err) { showToast('Error al cargar consumos', 'error'); }
+  }
+
+  function showTab(tab) {
+    currentTab = tab;
+    document.getElementById('panel-users').style.display = tab === 'users' ? 'block' : 'none';
+    document.getElementById('panel-consumptions').style.display = tab === 'consumptions' ? 'block' : 'none';
+    document.getElementById('tab-users').className = tab === 'users' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm';
+    document.getElementById('tab-consumptions').className = tab === 'consumptions' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm';
+    if (tab === 'consumptions') loadAllConsumptions();
+  }
+
+  function openEdit(id) {
+    var u = users.find(function(x){ return x.id === id; });
+    if (!u) return;
+    document.getElementById('edit-user-id').value = id;
+    document.getElementById('edit-name').value = u.name;
+    document.getElementById('edit-company').value = u.company || '';
+    document.getElementById('edit-is-admin').value = String(u.is_admin);
+    document.getElementById('edit-is-active').value = String(u.is_active);
+    document.getElementById('edit-modal').style.display='flex';
+  }
+
+  function closeModal() { document.getElementById('edit-modal').style.display='none'; }
+
+  async function saveUser() {
+    var id = document.getElementById('edit-user-id').value;
+    try {
+      await api.admin.updateUser(id, {
+        name: document.getElementById('edit-name').value,
+        company: document.getElementById('edit-company').value || null,
+        is_admin: document.getElementById('edit-is-admin').value === 'true',
+        is_active: document.getElementById('edit-is-active').value === 'true',
+      });
+      showToast('Usuario actualizado');
+      closeModal();
+      loadUsers();
+    } catch(err) { showToast(err.message, 'error'); }
+  }
+
+  async function deleteUser(id) {
+    if (!confirm('¿Eliminar este usuario y todos sus datos? Esta acción no se puede deshacer.')) return;
+    try {
+      await api.admin.deleteUser(id);
+      showToast('Usuario eliminado');
+      loadUsers();
+      loadStats();
+    } catch(err) { showToast(err.message, 'error'); }
+  }
+
+  async function seedDemoData() {
+    if (!confirm('¿Insertar 12 meses de datos de demostración para tu cuenta?')) return;
+    try {
+      var result = await api.admin.seedDemoData();
+      showToast(result.message);
+      loadStats();
+    } catch(err) { showToast(err.message, 'error'); }
+  }
+
+  loadStats();
+  loadUsers();
+</script>
+</body>
+</html>

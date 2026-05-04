@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Plan IA — EcoTrack Pro</title>
+<link rel="stylesheet" href="../css/styles.css"/></head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-container"></div>
+  <main class="main-content">
+    <div class="topbar"><div><h1 class="page-title">Plan de Acción IA 🤖</h1><p class="page-subtitle">Recomendaciones personalizadas basadas en tus consumos</p></div></div>
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-title">Generar nuevo plan</div>
+      <p style="font-size:0.87rem;color:var(--text2);margin-bottom:16px">Selecciona un mes para que la IA analice tus datos y genere recomendaciones personalizadas.</p>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <select id="consumption-select" style="max-width:250px"><option value="">Selecciona un mes...</option></select>
+        <button class="btn-ai" onclick="generatePlan()" id="generate-btn">🤖 Generar plan con IA</button>
+      </div>
+    </div>
+    <div id="ai-loading" style="display:none" class="card">
+      <div style="text-align:center;padding:32px">
+        <div style="font-size:2rem;margin-bottom:12px">🤖</div>
+        <div style="font-weight:600;margin-bottom:6px">Analizando tus datos...</div>
+        <div style="color:var(--text2);font-size:0.85rem">La IA está generando tu plan personalizado</div>
+        <div class="loading" style="justify-content:center;height:60px"><span class="spinner"></span></div>
+      </div>
+    </div>
+    <div id="plan-result" style="display:none" class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="card-title" style="margin:0">Plan generado para <span id="plan-month"></span></div>
+        <span class="badge badge-green">✓ Generado con IA</span>
+      </div>
+      <div class="ai-plan-box" id="plan-text"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn-secondary" onclick="copyPlan()">📋 Copiar plan</button>
+        <a href="consumptions.html"><button class="btn-secondary">← Ver consumos</button></a>
+      </div>
+    </div>
+    <div id="no-consumptions" class="empty-state" style="display:none">
+      <div class="icon">📊</div><h3>Sin datos de consumo</h3>
+      <p>Necesitas al menos un registro para generar un plan.</p>
+      <a href="register-consumption.html"><button class="btn-primary" style="margin-top:16px">Registrar consumo</button></a>
+    </div>
+  </main>
+</div>
+<script src="../js/api.js"></script>
+<script>
+  requireAuth();
+  document.getElementById('sidebar-container').innerHTML = renderSidebar('ai-plan');
+  var consumptions = [];
+  async function loadConsumptions() {
+    try {
+      consumptions = await api.getConsumptions();
+      var select = document.getElementById('consumption-select');
+      if (!consumptions.length) { document.getElementById('no-consumptions').style.display='block'; return; }
+      consumptions.forEach(function(c){
+        var opt=document.createElement('option'); opt.value=c.id;
+        opt.textContent=c.month+' — '+c.carbon_footprint_kg.toFixed(1)+' kg CO₂'; select.appendChild(opt);
+      });
+      var params=new URLSearchParams(window.location.search);
+      var id=params.get('id');
+      if (id) { select.value=id; generatePlan(); }
+    } catch(err){ showToast('Error al cargar consumos','error'); }
+  }
+  async function generatePlan() {
+    var id=document.getElementById('consumption-select').value;
+    if (!id) { showToast('Selecciona un mes primero','error'); return; }
+    var consumption=consumptions.find(function(c){return c.id==id;});
+    document.getElementById('plan-result').style.display='none';
+    document.getElementById('ai-loading').style.display='block';
+    document.getElementById('generate-btn').disabled=true;
+    try {
+      var plan=await api.generateAIPlan(id);
+      document.getElementById('ai-loading').style.display='none';
+      document.getElementById('plan-result').style.display='block';
+      document.getElementById('plan-month').textContent=consumption?.month||'';
+      document.getElementById('plan-text').textContent=plan.plan_text;
+      showToast('Plan generado correctamente');
+    } catch(err){
+      document.getElementById('ai-loading').style.display='none';
+      showToast(err.message,'error');
+    } finally { document.getElementById('generate-btn').disabled=false; }
+  }
+  function copyPlan(){
+    navigator.clipboard.writeText(document.getElementById('plan-text').textContent)
+      .then(function(){showToast('Plan copiado al portapapeles');});
+  }
+  loadConsumptions();
+</script>
+</body></html>

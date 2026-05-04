@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard — EcoTrack Pro</title>
+  <link rel="stylesheet" href="../css/styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-container"></div>
+  <main class="main-content">
+    <div class="topbar">
+      <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle" id="welcome-text">Cargando...</p>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-secondary" onclick="api.exportCSV()" title="Descargar CSV">📥 Exportar CSV</button>
+        <a href="register-consumption.html"><button class="btn-primary">+ Registrar consumo</button></a>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="loading"><span class="spinner"></span></div></div>
+      <div class="stat-card"><div class="loading"><span class="spinner"></span></div></div>
+      <div class="stat-card"><div class="loading"><span class="spinner"></span></div></div>
+      <div class="stat-card"><div class="loading"><span class="spinner"></span></div></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-title">Evolución huella de carbono (kg CO₂)</div>
+        <div class="chart-container"><canvas id="lineChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Desglose último mes</div>
+        <div class="chart-container"><canvas id="pieChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-title">Consumos por categoría</div>
+      <div class="chart-container" style="height:220px"><canvas id="barChart"></canvas></div>
+    </div>
+
+    <div class="card" id="ai-plan-card" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="card-title" style="margin:0">Último plan de acción IA</div>
+        <a href="ai-plan.html"><button class="btn-ai btn-sm">Ver todos los planes</button></a>
+      </div>
+      <div class="ai-plan-box" id="latest-plan-text"></div>
+    </div>
+
+    <div class="empty-state" id="empty-state" style="display:none">
+      <div class="icon">🌱</div>
+      <h3>Aún no hay datos</h3>
+      <p>Registra tu primer consumo para ver estadísticas y gráficos.</p>
+      <a href="register-consumption.html"><button class="btn-primary" style="margin-top:16px">Registrar primer consumo</button></a>
+    </div>
+  </main>
+</div>
+<script src="../js/api.js"></script>
+<script>
+  requireAuth();
+  var user = getUser();
+  document.getElementById('sidebar-container').innerHTML = renderSidebar('dashboard');
+  document.getElementById('welcome-text').textContent = 'Bienvenido, ' + (user?.name||'') + (user?.company ? ' · ' + user.company : '');
+
+  var lineChart, pieChart, barChart;
+
+  async function loadDashboard() {
+    try {
+      var data = await api.dashboard();
+      if (!data.consumptions || data.consumptions.length === 0) {
+        document.getElementById('stats-grid').style.display='none';
+        document.querySelector('.charts-grid').style.display='none';
+        document.querySelector('.card:last-child').style.display='none';
+        document.getElementById('empty-state').style.display='block';
+        return;
+      }
+      renderStats(data);
+      renderCharts(data);
+      if (data.latest_plan) {
+        document.getElementById('ai-plan-card').style.display='block';
+        document.getElementById('latest-plan-text').textContent = data.latest_plan.plan_text;
+      }
+    } catch(err) { showToast('Error al cargar dashboard', 'error'); }
+  }
+
+  function renderStats(data) {
+    var c = data.consumptions;
+    var latest = c[0], prev = c[1];
+    var changeHTML = '';
+    if (prev) {
+      var change = ((latest.carbon_footprint_kg - prev.carbon_footprint_kg) / prev.carbon_footprint_kg * 100).toFixed(1);
+      var dir = change > 0 ? 'up' : 'down';
+      var arrow = change > 0 ? '↑' : '↓';
+      changeHTML = '<div class="stat-change ' + dir + '">' + arrow + ' ' + Math.abs(change) + '% vs mes anterior</div>';
+    }
+    document.getElementById('stats-grid').innerHTML =
+      '<div class="stat-card"><div class="stat-icon">🌍</div><div class="stat-value">' + latest.carbon_footprint_kg.toFixed(1) + '</div><div class="stat-label">kg CO₂ este mes</div>' + changeHTML + '</div>' +
+      '<div class="stat-card"><div class="stat-icon">📊</div><div class="stat-value">' + data.avg_carbon_kg.toFixed(1) + '</div><div class="stat-label">kg CO₂ promedio</div><div class="stat-change" style="color:var(--text3)">' + data.total_records + ' meses registrados</div></div>' +
+      '<div class="stat-card"><div class="stat-icon">🏆</div><div class="stat-value" style="font-size:1.3rem">' + (data.best_month||'—') + '</div><div class="stat-label">Mejor mes</div><div class="stat-change down">↓ Menor emisión</div></div>' +
+      '<div class="stat-card"><div class="stat-icon">⚠️</div><div class="stat-value" style="font-size:1.3rem">' + (data.worst_month||'—') + '</div><div class="stat-label">Peor mes</div><div class="stat-change up">↑ Mayor emisión</div></div>';
+  }
+
+  function renderCharts(data) {
+    var consumptions = [...data.consumptions].reverse();
+    var labels = consumptions.map(function(c){ return c.month; });
+    var carbon = consumptions.map(function(c){ return c.carbon_footprint_kg; });
+    var latest = data.consumptions[0];
+
+    if (lineChart) lineChart.destroy();
+    lineChart = new Chart(document.getElementById('lineChart').getContext('2d'), {
+      type:'line', data:{ labels:labels, datasets:[{ label:'kg CO₂', data:carbon, borderColor:'#2d7a2d', backgroundColor:'rgba(45,122,45,0.08)', borderWidth:2.5, pointBackgroundColor:'#2d7a2d', pointRadius:5, tension:0.4, fill:true }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,grid:{color:'#e8efe8'}},x:{grid:{display:false}}} }
+    });
+
+    if (pieChart) pieChart.destroy();
+    pieChart = new Chart(document.getElementById('pieChart').getContext('2d'), {
+      type:'doughnut',
+      data:{ labels:['Electricidad','Gas','Agua','Transporte'], datasets:[{ data:[+(latest.electricity_kwh*0.233).toFixed(2),+(latest.gas_kwh*0.202).toFixed(2),+(latest.water_liters*0.000298).toFixed(2),+(latest.transport_km*0.171).toFixed(2)], backgroundColor:['#2d7a2d','#1a6b8a','#d4920a','#c0392b'], borderWidth:0 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}, cutout:'60%' }
+    });
+
+    if (barChart) barChart.destroy();
+    barChart = new Chart(document.getElementById('barChart').getContext('2d'), {
+      type:'bar',
+      data:{ labels:labels, datasets:[
+        { label:'Electricidad (kWh)', data:consumptions.map(function(c){return c.electricity_kwh}), backgroundColor:'#2d7a2d' },
+        { label:'Gas (kWh)', data:consumptions.map(function(c){return c.gas_kwh}), backgroundColor:'#1a6b8a' },
+        { label:'Transporte (km)', data:consumptions.map(function(c){return c.transport_km}), backgroundColor:'#d4920a' },
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}, scales:{y:{beginAtZero:true,grid:{color:'#e8efe8'}},x:{grid:{display:false}}} }
+    });
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>

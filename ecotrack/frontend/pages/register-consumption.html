@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Registrar Consumo — EcoTrack Pro</title>
+<link rel="stylesheet" href="../css/styles.css"/></head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-container"></div>
+  <main class="main-content">
+    <div class="topbar"><div><h1 class="page-title">Registrar Consumo</h1><p class="page-subtitle">Introduce los datos de consumo del mes</p></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+      <div class="card">
+        <div id="form-error" class="alert alert-error" style="display:none"></div>
+        <div id="form-success" class="alert alert-success" style="display:none"></div>
+        <div class="form-group"><label>Mes</label><input type="month" id="month"/></div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0"/>
+        <div class="form-row">
+          <div class="form-group"><label>⚡ Electricidad (kWh)</label><input type="number" id="electricity" min="0" step="0.1" value="0" oninput="updatePreview()"/></div>
+          <div class="form-group"><label>🔥 Gas natural (kWh)</label><input type="number" id="gas" min="0" step="0.1" value="0" oninput="updatePreview()"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>💧 Agua (litros)</label><input type="number" id="water" min="0" step="1" value="0" oninput="updatePreview()"/></div>
+          <div class="form-group"><label>🚗 Transporte (km)</label><input type="number" id="transport" min="0" step="1" value="0" oninput="updatePreview()"/></div>
+        </div>
+        <div class="form-group"><label>📝 Notas (opcional)</label><input type="text" id="notes" placeholder="Observaciones del mes..."/></div>
+        <div class="form-actions" style="justify-content:space-between;align-items:center">
+          <a href="consumptions.html" style="color:var(--text2);font-size:0.85rem">← Volver</a>
+          <div style="display:flex;gap:10px">
+            <button class="btn-secondary" onclick="resetForm()">Limpiar</button>
+            <button class="btn-primary" onclick="handleSubmit()">Guardar registro</button>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title">Vista previa de huella</div>
+          <div style="text-align:center;padding:16px 0">
+            <div style="font-size:3rem;font-weight:800;color:var(--green)" id="preview-total">0.0</div>
+            <div style="color:var(--text2);font-size:0.87rem;margin-top:4px">kg de CO₂ estimados</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:0.7rem;color:var(--text3);font-weight:700;text-transform:uppercase">Electricidad</div><div style="font-size:1.1rem;font-weight:700;color:var(--green)" id="prev-elec">0.0 kg</div></div>
+            <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:0.7rem;color:var(--text3);font-weight:700;text-transform:uppercase">Gas</div><div style="font-size:1.1rem;font-weight:700;color:var(--blue)" id="prev-gas">0.0 kg</div></div>
+            <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:0.7rem;color:var(--text3);font-weight:700;text-transform:uppercase">Agua</div><div style="font-size:1.1rem;font-weight:700;color:var(--yellow)" id="prev-water">0.0 kg</div></div>
+            <div style="background:var(--surface2);border-radius:8px;padding:12px;text-align:center"><div style="font-size:0.7rem;color:var(--text3);font-weight:700;text-transform:uppercase">Transporte</div><div style="font-size:1.1rem;font-weight:700;color:var(--red)" id="prev-transport">0.0 kg</div></div>
+          </div>
+        </div>
+        <div class="card" style="background:var(--green-light);border-color:rgba(45,122,45,0.2)">
+          <div class="card-title" style="color:var(--green)">💡 Factores de emisión</div>
+          <p style="font-size:0.83rem;color:var(--text2);line-height:1.6">• Electricidad: 0.233 kg CO₂/kWh<br>• Gas natural: 0.202 kg CO₂/kWh<br>• Agua: 0.000298 kg CO₂/litro<br>• Transporte: 0.171 kg CO₂/km<br><small>Fuente: IPCC / IDAE España</small></p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="../js/api.js"></script>
+<script>
+  requireAuth();
+  document.getElementById('sidebar-container').innerHTML = renderSidebar('register-consumption');
+  var now = new Date();
+  document.getElementById('month').value = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var F = {electricity:0.233,gas:0.202,water:0.000298,transport:0.171};
+  function updatePreview() {
+    var e=parseFloat(document.getElementById('electricity').value)||0;
+    var g=parseFloat(document.getElementById('gas').value)||0;
+    var w=parseFloat(document.getElementById('water').value)||0;
+    var t=parseFloat(document.getElementById('transport').value)||0;
+    document.getElementById('preview-total').textContent=(e*F.electricity+g*F.gas+w*F.water+t*F.transport).toFixed(1);
+    document.getElementById('prev-elec').textContent=(e*F.electricity).toFixed(1)+' kg';
+    document.getElementById('prev-gas').textContent=(g*F.gas).toFixed(1)+' kg';
+    document.getElementById('prev-water').textContent=(w*F.water).toFixed(3)+' kg';
+    document.getElementById('prev-transport').textContent=(t*F.transport).toFixed(1)+' kg';
+  }
+  function resetForm() { ['electricity','gas','water','transport'].forEach(function(id){document.getElementById(id).value=0;}); updatePreview(); }
+  async function handleSubmit() {
+    var errorEl=document.getElementById('form-error'), successEl=document.getElementById('form-success');
+    errorEl.style.display='none'; successEl.style.display='none';
+    var month=document.getElementById('month').value;
+    if (!month) { errorEl.textContent='Selecciona un mes'; errorEl.style.display='block'; return; }
+    try {
+      var result = await api.createConsumption({
+        month:month,
+        electricity_kwh:parseFloat(document.getElementById('electricity').value)||0,
+        gas_kwh:parseFloat(document.getElementById('gas').value)||0,
+        water_liters:parseFloat(document.getElementById('water').value)||0,
+        transport_km:parseFloat(document.getElementById('transport').value)||0,
+        notes:document.getElementById('notes').value||null,
+      });
+      successEl.textContent='✓ Registro guardado. Huella: '+result.carbon_footprint_kg+' kg CO₂';
+      successEl.style.display='block';
+      setTimeout(function(){window.location.href='consumptions.html';},1500);
+    } catch(err){ errorEl.textContent=err.message; errorEl.style.display='block'; }
+  }
+</script>
+</body></html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EcoTrack Pro — Login</title>
+  <link rel="stylesheet" href="css/styles.css"/>
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="logo-icon">🌱</div>
+      <h1>EcoTrack Pro</h1>
+      <p>Gestión de sostenibilidad empresarial</p>
+    </div>
+    <div id="login-section">
+      <div id="login-error" class="alert alert-error" style="display:none"></div>
+      <div class="form-group"><label>EMAIL</label><input type="email" id="login-email" placeholder="tu@empresa.com"/></div>
+      <div class="form-group"><label>CONTRASEÑA</label><input type="password" id="login-password" placeholder="••••••••"/></div>
+      <button id="login-btn" class="btn-primary" style="width:100%;padding:12px">Iniciar sesión →</button>
+      <div class="auth-switch">¿No tienes cuenta? <a id="show-register">Regístrate gratis</a></div>
+    </div>
+    <div id="register-section" style="display:none">
+      <div id="register-error" class="alert alert-error" style="display:none"></div>
+      <div class="form-group"><label>NOMBRE</label><input type="text" id="reg-name" placeholder="María García"/></div>
+      <div class="form-group"><label>EMAIL</label><input type="email" id="reg-email" placeholder="tu@empresa.com"/></div>
+      <div class="form-group"><label>EMPRESA (opcional)</label><input type="text" id="reg-company" placeholder="Mi Empresa S.L."/></div>
+      <div class="form-group"><label>CONTRASEÑA (mín. 8 caracteres)</label><input type="password" id="reg-password" placeholder="••••••••"/></div>
+      <button id="register-btn" class="btn-primary" style="width:100%;padding:12px">Crear cuenta →</button>
+      <div class="auth-switch">¿Ya tienes cuenta? <a id="show-login">Inicia sesión</a></div>
+    </div>
+  </div>
+</div>
+<script src="js/api.js"></script>
+<script>
+  if (isLoggedIn()) window.location.replace('/pages/dashboard.html');
+
+  document.getElementById('show-register').addEventListener('click', function(){
+    document.getElementById('login-section').style.display='none';
+    document.getElementById('register-section').style.display='block';
+  });
+  document.getElementById('show-login').addEventListener('click', function(){
+    document.getElementById('register-section').style.display='none';
+    document.getElementById('login-section').style.display='block';
+  });
+
+  document.getElementById('login-btn').addEventListener('click', handleLogin);
+  document.getElementById('login-password').addEventListener('keydown', function(e){ if(e.key==='Enter') handleLogin(); });
+
+  async function handleLogin() {
+    var email = document.getElementById('login-email').value.trim();
+    var password = document.getElementById('login-password').value;
+    var errorEl = document.getElementById('login-error');
+    errorEl.style.display='none';
+    if (!email || !email.includes('@')) { errorEl.textContent='Introduce un email válido (ejemplo@empresa.com)'; errorEl.style.display='block'; return; }
+    if (!password) { errorEl.textContent='Introduce tu contraseña'; errorEl.style.display='block'; return; }
+    var btn = document.getElementById('login-btn');
+    btn.textContent='Iniciando...'; btn.disabled=true;
+    try {
+      var data = await api.login({ email: email, password: password });
+      if (!data || !data.access_token) { errorEl.textContent='Error inesperado del servidor'; errorEl.style.display='block'; return; }
+      localStorage.setItem('eco_token', data.access_token);
+      localStorage.setItem('eco_user', JSON.stringify(data.user));
+      window.location.replace('/pages/dashboard.html');
+    } catch(err) {
+      errorEl.textContent = err.message || 'Error al iniciar sesión';
+      errorEl.style.display='block';
+    } finally { btn.textContent='Iniciar sesión →'; btn.disabled=false; }
+  }
+
+  document.getElementById('register-btn').addEventListener('click', handleRegister);
+  async function handleRegister() {
+    var name = document.getElementById('reg-name').value.trim();
+    var email = document.getElementById('reg-email').value.trim();
+    var company = document.getElementById('reg-company').value.trim();
+    var password = document.getElementById('reg-password').value;
+    var errorEl = document.getElementById('register-error');
+    errorEl.style.display='none';
+    if (!name) { errorEl.textContent='Introduce tu nombre'; errorEl.style.display='block'; return; }
+    if (!email || !email.includes('@')) { errorEl.textContent='Email no válido'; errorEl.style.display='block'; return; }
+    if (!password || password.length < 8) { errorEl.textContent='La contraseña debe tener mínimo 8 caracteres'; errorEl.style.display='block'; return; }
+    var btn = document.getElementById('register-btn');
+    btn.textContent='Creando cuenta...'; btn.disabled=true;
+    try {
+      await api.register({ name: name, email: email, password: password, company: company || null });
+      var data = await api.login({ email: email, password: password });
+      localStorage.setItem('eco_token', data.access_token);
+      localStorage.setItem('eco_user', JSON.stringify(data.user));
+      window.location.replace('/pages/dashboard.html');
+    } catch(err) {
+      errorEl.textContent = err.message || 'Error al registrarse';
+      errorEl.style.display='block';
+    } finally { btn.textContent='Crear cuenta →'; btn.disabled=false; }
+  }
+</script>
+</body>
+</html>
